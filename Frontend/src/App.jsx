@@ -3,7 +3,7 @@ import axios from "axios";
 import "./App.css";
 import Loader from "./Loader";
 
-const API_URL = "http://localhost:3001/api";
+const API_URL = process.env.BACK_END_PORT;
 
 function App() {
   const [textPrompt, setTextPrompt] = useState("");
