@@ -1,7 +1,7 @@
-
 const express = require('express');
 const cors = require('cors');
-const dotenv = require('dotenv');
+// fs is not needed for serverless deployment if not writing files
+// const fs = require('fs'); 
 const serverless = require('serverless-http'); 
 
 const {
@@ -11,58 +11,67 @@ const {
 } = require('@google/generative-ai');
 
 
-
-// Load environment variables
-dotenv.config();
-
-const app = express();
-const PORT = 3001;
-
 // --- MODEL CONSTANTS ---
 const MULTIMODAL_MODEL = "gemini-2.5-flash";
 const T2I_MODEL = "gemini-2.5-flash-image-preview"; // Image generation
 
-
 const safetySettings = [
-    {
-        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-        threshold: HarmBlockThreshold.BLOCK_NONE,
-    },
-    {
-        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-        threshold: HarmBlockThreshold.BLOCK_NONE,
-    },
-    {
-        category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-        threshold: HarmBlockThreshold.BLOCK_NONE,
-    },
-    {
-        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-        threshold: HarmBlockThreshold.BLOCK_NONE,
-    },
+    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
 ];
 
-// Initialize Gemini client 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const geminiModel = genAI.getGenerativeModel({
-    model: MULTIMODAL_MODEL,
-    safetySettings: safetySettings
-});
+// --- LAZY INITIALIZATION & SINGLETON PATTERN ---
+// Initialize outside of the handler but inside a function to check API key safety.
+let geminiModelInstance = null;
+let t2iModelInstance = null;
+let genAIInstance = null;
+
+function getGenAI() {
+    if (!process.env.GEMINI_API_KEY) {
+        throw new Error("GEMINI_API_KEY environment variable is not set or accessible.");
+    }
+    if (!genAIInstance) {
+        // Initialize once per execution context (cold start)
+        genAIInstance = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    }
+    return genAIInstance;
+}
+
+function getGeminiModel() {
+    if (!geminiModelInstance) {
+        const genAI = getGenAI();
+        geminiModelInstance = genAI.getGenerativeModel({
+            model: MULTIMODAL_MODEL,
+            safetySettings: safetySettings
+        });
+    }
+    return geminiModelInstance;
+}
+
+function getT2IModel() {
+    if (!t2iModelInstance) {
+        const genAI = getGenAI();
+        t2iModelInstance = genAI.getGenerativeModel({ model: T2I_MODEL });
+    }
+    return t2iModelInstance;
+}
+// --------------------------------------------------
+
+const app = express();
 
 // Middleware
 app.use(
-  cors({
-    origin: process.env.FRONT_END_PORT || "*", 
-    methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  })
+    cors({
+        // Use environment variable for Vercel or fallback to specific origin
+        origin: process.env.FRONT_END_PORT || "http://localhost:5173", 
+        methods: ["GET", "POST", "OPTIONS"],
+        allowedHeaders: ["Content-Type", "Authorization"],
+        credentials: true,
+    })
 );
-
-// Allow preflight requests for all routes
-app.options("*", cors());
-
-
+app.options("*", cors()); // Handle preflight requests
 app.use(express.json({ limit: '50mb' }));
 
 // Helper for multimodal image part
@@ -75,95 +84,92 @@ function fileToGenerativePart(base64Data, mimeType) {
     };
 }
 
+// Endpoint for Text Enhancement (NLP) and Image Analysis (Vision)
 app.post('/api/enhance-and-analyze', async (req, res) => {
     const { type, textPrompt, base64Image, mimeType } = req.body;
-    let instruction;
-    let response;
-
+    
     try {
+        const geminiModel = getGeminiModel();
+        let instruction;
+        let response;
+
         if (type === 'enhance' && textPrompt) {
-            instruction = `Imagine an image of a promotional poster for a professional "${textPrompt}". 
-            Describe the visual scene in vivid, cinematic detail, suitable for an image generator. 
-            The description MUST NOT include any text overlays, contact information, dates, or prices. 
-            The output must be ONLY the descriptive scene.`;
-
-            response = await geminiModel.generateContent(instruction);
-
-        } 
-        else if (type === 'analyze' && base64Image && mimeType) {
+            instruction = `You are a world-class creative director specializing in high-fidelity generative art prompts. Take the user's brief text and expand it into a detailed, descriptive prompt suitable for a modern image generation AI, including style, lighting, composition, and mood. Keep it under 100 words. The output must be ONLY the descriptive scene.`;
             
-            instruction = "Describe this image in a single, vivid, and detailed sentence suitable for a 'style variation' image generator prompt. Output only the sentence.";
+            // Generate content using a simple prompt array
+            response = await geminiModel.generateContent([
+                instruction, 
+                `User brief: "${textPrompt}"`
+            ]);
 
-            const imagePart = {
-                inlineData: {
-                    data: base64Image,
-                    mimeType,
-                }
-            };
+        } else if (type === 'analyze' && base64Image && mimeType) {
+            
+            instruction = "Analyze this image. Describe its primary subject, style, color palette, and mood. Generate a high-quality, creative prompt of 50-70 words suitable for an image generation model to create similar variations. Output ONLY the generated prompt text.";
+            
+            const imagePart = fileToGenerativePart(base64Image, mimeType);
 
             response = await geminiModel.generateContent([
                 { text: instruction },
                 imagePart
             ]);
-        }
-         else {
+            
+        } else {
             return res.status(400).json({ error: "Invalid request type or missing parameters." });
         }
 
-        try {
-            const textResult = response.response.text().trim();
-            return res.json({ result: textResult });
-        } catch (e) {
-            throw new Error("Model did not return text. Content may have been blocked or the generation failed.");
-        }
+        // CORRECT SDK RESPONSE PARSING: Accessing the text directly
+        const textResult = response.text.trim();
+        return res.json({ result: textResult });
 
     } catch (error) {
         console.error("Gemini API Error:", error.message);
+        // Return 500 status with specific error message
         return res.status(500).json({ error: error.message || "AI service failed to process the request." });
     }
 });
 
+// Endpoint for Text-to-Image Generation (Workflow 1, Step 3)
 app.post('/api/generate-image', async (req, res) => {
-  const { approvedPrompt } = req.body;
+    const { approvedPrompt } = req.body;
 
-  if (!approvedPrompt) {
-    return res.status(400).json({ error: "Approved prompt is required." });
-  }
-
-  try {
-    // Get T2I model instance
-    const model = await genAI.getGenerativeModel({ model: T2I_MODEL });
-
-    // Generate image
-    const response = await model.generateContent(approvedPrompt);
-
-    let imageBase64 = null;
-    for (const part of response.response.candidates[0].content.parts) {
-      if (part.inlineData) {
-        imageBase64 = part.inlineData.data;
-
-        // Optional: save locally
-        // const buffer = Buffer.from(imageBase64, "base64");
-        // fs.writeFileSync("gemini-generated-test.png", buffer);
-      }
+    if (!approvedPrompt) {
+        return res.status(400).json({ error: "Approved prompt is required." });
     }
 
-    if (!imageBase64) throw new Error("No image returned from Gemini.");
+    try {
+        const t2iModel = getT2IModel();
 
-    res.json({
-      status: "Image generated successfully",
-      finalPrompt: approvedPrompt,
-      image: imageBase64,
-    });
+        // Generate image
+        const response = await t2iModel.generateContent({
+            contents: [{ parts: [{ text: approvedPrompt }] }],
+            config: {
+                responseModalities: ["IMAGE"],
+            }
+        });
 
-  } catch (error) {
-    console.error("Gemini Image Gen Error:", error.message);
-    res.status(500).json({ error: error.message });
-  }
+        // CORRECT SDK RESPONSE PARSING: Find the image part in candidates
+        const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData?.mimeType.startsWith('image/'));
+        
+        if (!imagePart || !imagePart.inlineData?.data) {
+             throw new Error("No image data returned from Gemini.");
+        }
+        
+        const imageBase64 = imagePart.inlineData.data;
+
+        res.json({
+            status: "Image generated successfully",
+            finalPrompt: approvedPrompt,
+            image: imageBase64,
+        });
+
+    } catch (error) {
+        console.error("Gemini Image Gen Error:", error.message);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 
-// Variation generation endpoint
+// Variation generation endpoint (Workflow 2, Step 3)
 app.post('/api/generate-variation', async (req, res) => {
     const { imageAnalysis } = req.body;
 
@@ -172,24 +178,26 @@ app.post('/api/generate-variation', async (req, res) => {
     }
 
     try {
-        // Create a variation prompt
-        const variationPrompt = `Create a stylized, artistic variation of the following image description, for a futuristic cyberpunk art piece: ${imageAnalysis}`;
+        const t2iModel = getT2IModel();
+        
+        // Construct a stylized prompt based on the analysis
+        const variationPrompt = `Create a stylized, artistic variation of the following image description, rendered as a cinematic digital painting with neon lighting and deep shadow: ${imageAnalysis}`;
 
-        // const ai = new GoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY });
-        const model = await genAI.getGenerativeModel({ model: T2I_MODEL });
-
-        const response = await model.generateContent(variationPrompt);
-
-        let imageBase64 = null;
-        for (const part of response.response.candidates[0].content.parts) {
-            if (part.inlineData) {
-                imageBase64 = part.inlineData.data;
+        const response = await t2iModel.generateContent({
+            contents: [{ parts: [{ text: variationPrompt }] }],
+            config: {
+                responseModalities: ["IMAGE"],
             }
-        }
+        });
 
-        if (!imageBase64) {
+        // CORRECT SDK RESPONSE PARSING: Find the image part in candidates
+        const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData?.mimeType.startsWith('image/'));
+
+        if (!imagePart || !imagePart.inlineData?.data) {
             throw new Error("No image data returned from Gemini.");
         }
+
+        const imageBase64 = imagePart.inlineData.data;
 
         res.json({
             status: "Variation generated successfully",
@@ -204,9 +212,5 @@ app.post('/api/generate-variation', async (req, res) => {
 });
 
 
-// app.listen(PORT, () => {
-//     console.log(`Server running on http://localhost:${PORT}`);
-// });
-
-// ✅ Vercel doesn’t need listen(), just export
+// Export the Express app as a serverless function handler
 module.exports.handler = serverless(app);
