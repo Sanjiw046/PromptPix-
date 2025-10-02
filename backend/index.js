@@ -114,48 +114,44 @@ app.post('/api/enhance-and-analyze', async (req, res) => {
 });
 
 app.post('/api/generate-image', async (req, res) => {
-    const { approvedPrompt } = req.body;
+  const { approvedPrompt } = req.body;
 
-    if (!approvedPrompt) {
-        return res.status(400).json({ error: "Approved prompt is required." });
+  if (!approvedPrompt) {
+    return res.status(400).json({ error: "Approved prompt is required." });
+  }
+
+  try {
+    // Get T2I model instance
+    const model = await genAI.getGenerativeModel({ model: T2I_MODEL });
+
+    // Generate image
+    const response = await model.generateContent(approvedPrompt);
+
+    let imageBase64 = null;
+    for (const part of response.response.candidates[0].content.parts) {
+      if (part.inlineData) {
+        imageBase64 = part.inlineData.data;
+
+        // Optional: save locally
+        const buffer = Buffer.from(imageBase64, "base64");
+        fs.writeFileSync("gemini-generated-test.png", buffer);
+      }
     }
 
-    try {
-        // const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    if (!imageBase64) throw new Error("No image returned from Gemini.");
 
-        const response = await genAI.models.generateContent({
-            model: T2I_MODEL,
-            contents: approvedPrompt,
-        });
+    res.json({
+      status: "Image generated successfully",
+      finalPrompt: approvedPrompt,
+      image: imageBase64,
+    });
 
-        let imageBase64 = null;
-        for (const part of response.candidates[0].content.parts) {
-            if (part.inlineData) {
-                imageBase64 = part.inlineData.data;
-
-                // Save locally (optional)
-                const buffer = Buffer.from(imageBase64, "base64");
-                fs.writeFileSync("gemini-generated-test.png", buffer);
-                console.log("✅ Image saved as gemini-generated-test.png");
-            }
-        }
-
-        if (!imageBase64) {
-            throw new Error("No image data returned from Gemini.");
-        }
-
-        // ✅ Return base64 image to frontend
-        res.json({
-            status: "Image generated successfully",
-            finalPrompt: approvedPrompt,
-            image: imageBase64   // <-- send image here
-        });
-
-    } catch (error) {
-        console.error("Gemini Image Gen Error:", error.message);
-        res.status(500).json({ error: error.message });
-    }
+  } catch (error) {
+    console.error("Gemini Image Gen Error:", error.message);
+    res.status(500).json({ error: error.message });
+  }
 });
+
 
 // Variation generation endpoint
 app.post('/api/generate-variation', async (req, res) => {

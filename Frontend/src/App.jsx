@@ -1,26 +1,23 @@
-// App.jsx
 import React, { useState } from "react";
 import axios from "axios";
 import "./App.css";
-import Loader from "./Loader"; // Loader component (Loader.jsx + Loader.css should exist)
+import Loader from "./Loader";
 
-// Backend API URL
 const API_URL = "http://localhost:3001/api";
 
 function App() {
   const [textPrompt, setTextPrompt] = useState("");
   const [enhancedPrompt, setEnhancedPrompt] = useState("");
   const [approvedPrompt, setApprovedPrompt] = useState("");
+  const [isPromptApproved, setIsPromptApproved] = useState(false);
   const [generatedImage, setGeneratedImage] = useState("");
   const [status, setStatus] = useState("Ready");
 
   const [uploadedImageFile, setUploadedImageFile] = useState(null);
   const [imageAnalysis, setImageAnalysis] = useState("");
   const [variationImage, setVariationImage] = useState("");
-
   const [loading, setLoading] = useState(false);
 
-  // Helper: Convert file to base64
   const toBase64 = (file) =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -29,7 +26,6 @@ function App() {
       reader.onerror = (error) => reject(error);
     });
 
-  // Generic Axios handler
   const fetchAIResponse = async (endpoint, payload) => {
     try {
       const response = await axios.post(`${API_URL}/${endpoint}`, payload);
@@ -40,174 +36,174 @@ function App() {
     }
   };
 
-  // Enhance text prompt
   const handleEnhancePrompt = async () => {
-    setStatus("Enhancing prompt via backend...");
+    setStatus("Enhancing prompt...");
     setEnhancedPrompt("");
+    setApprovedPrompt("");
+    setIsPromptApproved(false);
     setLoading(true);
     try {
-      const payload = { type: "enhance", textPrompt };
-      const data = await fetchAIResponse("enhance-and-analyze", payload);
-      const newEnhancedPrompt = data.result;
-      setEnhancedPrompt(newEnhancedPrompt);
-      setApprovedPrompt(newEnhancedPrompt);
-      setStatus("Prompt Enhanced. Review and Approve/Generate.");
+      const data = await fetchAIResponse("enhance-and-analyze", {
+        type: "enhance",
+        textPrompt,
+      });
+      setEnhancedPrompt(data.result);
+      setApprovedPrompt(data.result);
+      setStatus("Prompt enhanced. Review & approve.");
     } catch (err) {
       console.error(err);
-      setStatus("Error during prompt enhancement: " + err.message);
+      setStatus("Error: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Generate image from approved prompt
   const handleImageGeneration = async () => {
-    if (!approvedPrompt) {
-      alert("Please enhance and approve a prompt first.");
+    if (!approvedPrompt || !isPromptApproved) {
+      alert("Please approve the prompt before generating image.");
       return;
     }
-    setStatus("Sending request to backend for image generation...");
+    setStatus("Generating image...");
     setGeneratedImage("");
     setLoading(true);
-
     try {
-      const payload = { approvedPrompt };
-      const data = await fetchAIResponse("generate-image", payload);
-
+      const data = await fetchAIResponse("generate-image", { approvedPrompt });
       const fullDataUri = `data:image/png;base64,${data.image}`;
       setGeneratedImage(fullDataUri);
-      setStatus(`Image Generation Complete! Status: ${data.status}`);
+      setStatus("Image generation complete!");
     } catch (err) {
       console.error(err);
-      setStatus("Error: T2I failed. " + err.message + ". Check console and ensure backend is running.");
+      setStatus("Error generating image: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // <<< FIXED: handleImageFileChange >>>
   const handleImageFileChange = (event) => {
     const file = event.target.files?.[0] || null;
     setUploadedImageFile(file);
-
-    // Clear previous analysis / generated images when new file is chosen
     setImageAnalysis("");
     setVariationImage("");
     setGeneratedImage("");
-
-    if (file) {
-      setStatus("Image uploaded, ready for analysis.");
-    } else {
-      setStatus("No image selected.");
-    }
+    setStatus(file ? "Image uploaded" : "No image selected");
   };
 
-  // Analyze uploaded image
   const handleImageAnalysis = async () => {
-    if (!uploadedImageFile) {
-      alert("Please upload an image first.");
-      return;
-    }
-    setStatus("Analyzing image via backend...");
+    if (!uploadedImageFile) return alert("Upload an image first");
+    setStatus("Analyzing image...");
     setImageAnalysis("");
     setLoading(true);
-
     try {
       const base64Image = await toBase64(uploadedImageFile);
-      const payload = {
+      const data = await fetchAIResponse("enhance-and-analyze", {
         type: "analyze",
         base64Image,
         mimeType: uploadedImageFile.type,
-      };
-      const data = await fetchAIResponse("enhance-and-analyze", payload);
+      });
       setImageAnalysis(data.result);
-      setStatus("Analysis Complete. Ready to Generate Variation.");
+      setStatus("Analysis complete. Ready for variation.");
     } catch (err) {
       console.error(err);
-      setStatus("Error during image analysis: " + err.message);
+      setStatus("Error analyzing image: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Generate stylized variation from analysis
   const handleVariationGeneration = async () => {
-  if (!imageAnalysis) {
-    alert("Please analyze the image first.");
-    return;
-  }
-
-  setStatus("Sending request to backend for variation generation...");
-  setVariationImage("");
-  setLoading(true);
-
-  try {
-    const payload = { imageAnalysis };
-    const data = await fetchAIResponse("generate-variation", payload);
-    const fullDataUri = `data:image/png;base64,${data.image}`;
-    setVariationImage(fullDataUri);
-    setStatus(`Variation Generation Complete! Status: ${data.status}`);
-  } catch (err) {
-    console.error(err);
-    setStatus("Error: Variation T2I failed. " + err.message + ". Check backend logs.");
-  } finally {
-    setLoading(false);
-  }
-};
-
+    if (!imageAnalysis) return alert("Analyze image first");
+    setStatus("Generating variation...");
+    setVariationImage("");
+    setLoading(true);
+    try {
+      const data = await fetchAIResponse("generate-variation", { imageAnalysis });
+      const fullDataUri = `data:image/png;base64,${data.image}`;
+      setVariationImage(fullDataUri);
+      setStatus("Variation generation complete!");
+    } catch (err) {
+      console.error(err);
+      setStatus("Error generating variation: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="page">
       {loading && <Loader />}
+      <h2>AI Image Generation</h2>
+      <div className="status-bar"><strong>Status:</strong> {status}</div>
 
-      <h2>AI Image generation</h2>
-      <div className="status-bar">
-        <strong>Status:</strong> {status}
-      </div>
-
-      {/* Workflow 1: Text -> Image */}
+      {/* Text → Enhance → Approval → Image */}
       <div className="workflow-section">
-        <h3>1. Text Prompt → Image Generation</h3>
+        <h3>1. Text → Enhance → Approve → Image</h3>
         <input
           type="text"
           value={textPrompt}
           onChange={(e) => setTextPrompt(e.target.value)}
-          placeholder="Enter a simple prompt..."
+          placeholder="Enter a prompt..."
         />
         <button onClick={handleEnhancePrompt}>Enhance Prompt</button>
-        <div className="response-box">
-          <strong>Enhanced Prompt:</strong> {enhancedPrompt || "Awaiting enhancement..."}
-        </div>
-        <button onClick={handleImageGeneration} disabled={!approvedPrompt}>
+
+        {enhancedPrompt && (
+          <div className="response-box">
+            <strong>Enhanced Prompt:</strong>
+            <textarea
+              className={isPromptApproved ? "approved-prompt" : ""}
+              value={approvedPrompt}
+              onChange={(e) => {
+                setApprovedPrompt(e.target.value);
+                setIsPromptApproved(false);
+              }}
+              rows={3}
+            />
+            <button
+              className="approve-btn"
+              onClick={() => {
+                setIsPromptApproved(true);
+                setStatus("Prompt approved. Ready to generate image.");
+              }}
+            >
+              Approve Prompt
+            </button>
+          </div>
+        )}
+
+        <button
+          onClick={handleImageGeneration}
+          disabled={!approvedPrompt || !isPromptApproved}
+          className={isPromptApproved ? "generate-btn-approved" : "generate-btn"}
+        >
           Generate Image
         </button>
+
         {generatedImage && (
           <div className="image-result">
             <strong>Generated Image:</strong>
-            <img src={generatedImage} alt="Generated from Text Prompt" />
+            <img src={generatedImage} alt="Generated" />
           </div>
         )}
       </div>
 
       <hr />
 
-      {/* Workflow 2: Image -> Variation */}
+      {/* Image → Analyze → Variation */}
       <div className="workflow-section">
-        <h3>2. Image → Analysis → Variation Generation</h3>
+        <h3>2. Image → Analysis → Variation</h3>
         <input type="file" accept="image/*" onChange={handleImageFileChange} />
         <button onClick={handleImageAnalysis} disabled={!uploadedImageFile}>
           Analyze Image
         </button>
         <div className="response-box">
-          <strong>Analysis Prompt:</strong> {imageAnalysis || "Awaiting analysis..."}
+          <strong>Analysis:</strong> {imageAnalysis || "Awaiting analysis..."}
         </div>
         <button onClick={handleVariationGeneration} disabled={!imageAnalysis}>
           Generate Variation
         </button>
         {variationImage && (
           <div className="image-result">
-            <strong>Generated Variation:</strong>
-            <img src={variationImage} alt="Generated Image Variation" />
+            <strong>Variation:</strong>
+            <img src={variationImage} alt="Variation" />
           </div>
         )}
       </div>
