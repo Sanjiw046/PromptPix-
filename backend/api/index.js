@@ -68,13 +68,13 @@ function getT2IModel() {
 }
 // --------------------------------------------------
 
-
+const allowedOrigin = process.env.FRONT_END_PORT;
 
 // Middleware
 app.use(
     cors({
         // Use environment variable for Vercel or fallback to specific origin
-        origin: process.env.FRONT_END_PORT || "http://localhost:5173", 
+        origin: allowedOrigin, 
         methods: ["GET", "POST", "OPTIONS"],
         allowedHeaders: ["Content-Type", "Authorization"],
         credentials: true,
