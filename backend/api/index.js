@@ -132,7 +132,6 @@ app.post('/api/enhance-and-analyze', async (req, res) => {
         return res.json({ result: textResult });
 
     } catch (error) {
-        console.error("Gemini API Error:", error.message);
         // Return 500 status with specific error message
         return res.status(500).json({ error: error.message || "AI service failed to process the request." });
     }
@@ -178,7 +177,6 @@ app.post('/api/generate-image', async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Gemini Image Gen Error:", error.message);
         res.status(500).json({ error: error.message });
     }
 });
@@ -218,7 +216,6 @@ app.post('/api/generate-variation', async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Gemini Variation Error:", error.message);
         res.status(500).json({ error: error.message });
     }
 });
