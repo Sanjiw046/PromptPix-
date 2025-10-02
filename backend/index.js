@@ -204,6 +204,9 @@ app.post('/api/generate-variation', async (req, res) => {
 });
 
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});
+// app.listen(PORT, () => {
+//     console.log(`Server running on http://localhost:${PORT}`);
+// });
+
+// ✅ Vercel doesn’t need listen(), just export
+module.exports = app;
