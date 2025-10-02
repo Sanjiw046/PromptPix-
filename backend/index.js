@@ -59,6 +59,10 @@ app.use(
   })
 );
 
+// Allow preflight requests for all routes
+app.options("*", cors());
+
+
 app.use(express.json({ limit: '50mb' }));
 
 // Helper for multimodal image part
