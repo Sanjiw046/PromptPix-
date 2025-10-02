@@ -118,7 +118,8 @@ app.post('/api/enhance-and-analyze', async (req, res) => {
         }
 
         // CORRECT SDK RESPONSE PARSING: Accessing the text directly
-        const textResult = response.text.trim();
+        // For text generation endpoints
+        const textResult = response?.response?.text?.trim() || "No text returned";
         return res.json({ result: textResult });
 
     } catch (error) {
