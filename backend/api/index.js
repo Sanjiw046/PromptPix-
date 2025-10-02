@@ -2,7 +2,7 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const fs = require('fs');
+const serverless = require('serverless-http'); 
 
 const {
     GoogleGenerativeAI,
@@ -209,4 +209,4 @@ app.post('/api/generate-variation', async (req, res) => {
 // });
 
 // ✅ Vercel doesn’t need listen(), just export
-module.exports = app;
+module.exports.handler = serverless(app);
