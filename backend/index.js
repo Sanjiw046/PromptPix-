@@ -50,9 +50,15 @@ const geminiModel = genAI.getGenerativeModel({
 });
 
 // Middleware
-app.use(cors({
-    origin: process.env.FRONT_END_PORT
-}));
+app.use(
+  cors({
+    origin: process.env.FRONT_END_PORT || "*", 
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
+
 app.use(express.json({ limit: '50mb' }));
 
 // Helper for multimodal image part
