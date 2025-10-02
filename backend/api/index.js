@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const serverless = require('serverless-http'); 
+// const serverless = require('serverless-http'); 
 const app = express();
 const dotenv = require('dotenv');
 dotenv.config(); 
@@ -230,4 +230,4 @@ app.post('/api/generate-variation', async (req, res) => {
 
 
 // Export the Express app as a serverless function handler
-module.exports.handler = serverless(app);
+module.exports = app; 
