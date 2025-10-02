@@ -51,7 +51,7 @@ const geminiModel = genAI.getGenerativeModel({
 
 // Middleware
 app.use(cors({
-    origin: 'http://localhost:5173'
+    origin: process.env.FRONT_END_PORT
 }));
 app.use(express.json({ limit: '50mb' }));
 
