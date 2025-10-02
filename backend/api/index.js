@@ -29,7 +29,7 @@ let geminiModelInstance = null;
 let t2iModelInstance = null;
 let genAIInstance = null;
 
-console.log("GEMINI_API_KEY:", process.env.GEMINI_API_KEY);
+// console.log("GEMINI_API_KEY:", process.env.GEMINI_API_KEY);
 
 function getGenAI() {
     if (!process.env.GEMINI_API_KEY) {
@@ -41,6 +41,12 @@ function getGenAI() {
     }
     return genAIInstance;
 }
+
+app.get('/api/test-key', (req, res) => {
+    const keyExists = !!process.env.GEMINI_API_KEY;
+    res.json({ geminiKeySet: keyExists });
+});
+
 
 function getGeminiModel() {
     if (!geminiModelInstance) {
