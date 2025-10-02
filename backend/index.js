@@ -143,8 +143,8 @@ app.post('/api/generate-image', async (req, res) => {
         imageBase64 = part.inlineData.data;
 
         // Optional: save locally
-        const buffer = Buffer.from(imageBase64, "base64");
-        fs.writeFileSync("gemini-generated-test.png", buffer);
+        // const buffer = Buffer.from(imageBase64, "base64");
+        // fs.writeFileSync("gemini-generated-test.png", buffer);
       }
     }
 
