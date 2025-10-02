@@ -1,8 +1,9 @@
 const express = require('express');
 const cors = require('cors');
-// fs is not needed for serverless deployment if not writing files
-// const fs = require('fs'); 
 const serverless = require('serverless-http'); 
+const app = express();
+const dotenv = require('dotenv');
+dotenv.config(); 
 
 const {
     GoogleGenerativeAI,
@@ -27,6 +28,8 @@ const safetySettings = [
 let geminiModelInstance = null;
 let t2iModelInstance = null;
 let genAIInstance = null;
+
+console.log("GEMINI_API_KEY:", process.env.GEMINI_API_KEY);
 
 function getGenAI() {
     if (!process.env.GEMINI_API_KEY) {
@@ -59,7 +62,7 @@ function getT2IModel() {
 }
 // --------------------------------------------------
 
-const app = express();
+
 
 // Middleware
 app.use(
@@ -71,7 +74,7 @@ app.use(
         credentials: true,
     })
 );
-app.options("*", cors()); // Handle preflight requests
+// app.options("*", cors()); // Handle preflight requests
 app.use(express.json({ limit: '50mb' }));
 
 // Helper for multimodal image part
@@ -119,7 +122,7 @@ app.post('/api/enhance-and-analyze', async (req, res) => {
 
         // CORRECT SDK RESPONSE PARSING: Accessing the text directly
         // For text generation endpoints
-        const textResult = response?.response?.text?.trim() || "No text returned";
+        const textResult = response?.response?.text()?.trim() || "No text returned";
         return res.json({ result: textResult });
 
     } catch (error) {
@@ -130,6 +133,8 @@ app.post('/api/enhance-and-analyze', async (req, res) => {
 });
 
 // Endpoint for Text-to-Image Generation (Workflow 1, Step 3)
+// const fs = require("fs");
+
 app.post('/api/generate-image', async (req, res) => {
     const { approvedPrompt } = req.body;
 
@@ -138,25 +143,28 @@ app.post('/api/generate-image', async (req, res) => {
     }
 
     try {
-        const t2iModel = getT2IModel();
+        const genAI = getGenAI(); // get your initialized AI instance
+        const model = await genAI.getGenerativeModel({ model: T2I_MODEL });
 
-        // Generate image
-        const response = await t2iModel.generateContent({
-            contents: [{ parts: [{ text: approvedPrompt }] }],
-            config: {
-                responseModalities: ["IMAGE"],
+        // --- Generate image ---
+        // Use your old style: prompt passed directly as array
+        const response = await model.generateContent([approvedPrompt]);
+        // console.log(response);
+
+        let imageBase64 = null;
+
+        // Extract the image Base64 exactly like your old code
+        for (const part of response.response.candidates[0].content.parts) {
+            if (part.inlineData && part.inlineData.data) {
+                imageBase64 = part.inlineData.data;
             }
-        });
-
-        // CORRECT SDK RESPONSE PARSING: Find the image part in candidates
-        const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData?.mimeType.startsWith('image/'));
-        
-        if (!imagePart || !imagePart.inlineData?.data) {
-             throw new Error("No image data returned from Gemini.");
         }
-        
-        const imageBase64 = imagePart.inlineData.data;
 
+        if (!imageBase64) {
+            throw new Error("No image returned from Gemini.");
+        }
+
+        // ✅ Return image to frontend
         res.json({
             status: "Image generated successfully",
             finalPrompt: approvedPrompt,
@@ -170,6 +178,8 @@ app.post('/api/generate-image', async (req, res) => {
 });
 
 
+
+
 // Variation generation endpoint (Workflow 2, Step 3)
 app.post('/api/generate-variation', async (req, res) => {
     const { imageAnalysis } = req.body;
@@ -180,25 +190,20 @@ app.post('/api/generate-variation', async (req, res) => {
 
     try {
         const t2iModel = getT2IModel();
-        
-        // Construct a stylized prompt based on the analysis
+
         const variationPrompt = `Create a stylized, artistic variation of the following image description, rendered as a cinematic digital painting with neon lighting and deep shadow: ${imageAnalysis}`;
 
-        const response = await t2iModel.generateContent({
-            contents: [{ parts: [{ text: variationPrompt }] }],
-            config: {
-                responseModalities: ["IMAGE"],
+        const response = await t2iModel.generateContent([variationPrompt]);
+
+        let imageBase64 = null;
+
+        for (const part of response.response.candidates[0].content.parts) {
+            if (part.inlineData && part.inlineData.data) {
+                imageBase64 = part.inlineData.data;
             }
-        });
-
-        // CORRECT SDK RESPONSE PARSING: Find the image part in candidates
-        const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData?.mimeType.startsWith('image/'));
-
-        if (!imagePart || !imagePart.inlineData?.data) {
-            throw new Error("No image data returned from Gemini.");
         }
 
-        const imageBase64 = imagePart.inlineData.data;
+        if (!imageBase64) throw new Error("No image data returned from Gemini.");
 
         res.json({
             status: "Variation generated successfully",
@@ -211,6 +216,14 @@ app.post('/api/generate-variation', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+
+// if (process.env.NODE_ENV !== "production") {
+//     const PORT = 3001;
+//     app.listen(PORT, () => {
+//         console.log(`Local server running on http://localhost:${PORT}`);
+//     });
+// }
 
 
 // Export the Express app as a serverless function handler
