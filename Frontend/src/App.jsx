@@ -28,7 +28,11 @@ function App() {
 
   const fetchAIResponse = async (endpoint, payload) => {
     try {
-      const response = await axios.post(`${API_URL}/${endpoint}`, payload);
+      const response = await axios.post(`${API_URL}/${endpoint}`, payload,
+        { headers:{
+          "Content-Type": "application/json",
+        }}
+      );
       return response.data;
     } catch (error) {
       const errorMessage = error.response?.data?.error || error.message;
