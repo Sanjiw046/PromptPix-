@@ -5,11 +5,14 @@ body {
   margin: 0;
   padding: 0;
   color: #2d3436;
+    display: flex;
+  justify-content: center;
 }
 
 .page {
   max-width: 1000px;
-  margin: 40px auto;
+  /* margin: 40px auto; */
+  min-width: 600px;
   background: #fff;
   padding: 40px 30px;
   border-radius: 12px;

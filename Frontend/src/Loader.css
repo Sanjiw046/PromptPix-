@@ -7,6 +7,11 @@
   position: fixed;
   z-index: 100;
   top: 0;
+  height: 100vh;
+  left:0 ;
+  min-width: 100vw !important;
+  background-color: rgba(0, 0, 0, 0.308);
+  
 }
 
 .spinner {
