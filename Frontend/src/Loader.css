@@ -4,6 +4,9 @@
   align-items: center;
   justify-content: center;
   padding: 15px;
+  position: fixed;
+  z-index: 100;
+  top: 0;
 }
 
 .spinner {
